@@ -173,11 +173,13 @@
   const root = document.getElementById('order-app');
 
   const STATUS = ['접수','예약','완료'];
+  const CATEGORY = ['씽크볼','분쇄기','기타'];
   let state = {
     tab: 'list',
     orders: [],
     filterStatus: '전체',
     filterRegion: '전체',
+    filterCategory: '전체',
     detailId: null,
     addMode: 'photo', // photo | manual
     photoBase64: null,
@@ -192,7 +194,7 @@
   };
 
   function emptyDraft(){
-    return { customerName:'', phone:'', address:'', item:'', price:'', referrer:'', memo:'' };
+    return { customerName:'', phone:'', address:'', item:'', price:'', memo:'', category:'기타' };
   }
   function today(){ return new Date().toISOString().slice(0,10); }
   function firstOfMonth(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`; }
@@ -209,34 +211,17 @@
     const detailsLines = [
       o.phone ? `연락처: ${o.phone}` : '',
       o.price!=null ? `견적 금액: ${fmtWon(o.price)}` : '',
-      o.referrer ? `소개자: ${o.referrer}` : '',
     ].filter(Boolean).join('\n');
     const details = encodeURIComponent(detailsLines);
     const location = encodeURIComponent(o.address || '');
     return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${end}&details=${details}&location=${location}`;
   }
 
-  const TOP_LEVEL_REGIONS = new Set([
-    '서울','부산','대구','인천','광주','대전','울산','세종',
-    '서울특별시','부산광역시','대구광역시','인천광역시','광주광역시','대전광역시','울산광역시','세종특별자치시',
-    '경기','강원','충북','충남','전북','전남','경북','경남','제주',
-    '경기도','강원도','강원특별자치도','충청북도','충청남도','전라북도','전북특별자치도','전라남도','경상북도','경상남도','제주특별자치도','제주도',
-  ]);
   function extractRegion(address){
     if(!address) return '기타';
     const tokens = address.trim().split(/\s+/).filter(Boolean);
     if(tokens.length===0) return '기타';
-    const suffixes = ['특별자치시','특별자치도','광역시','특별시','도','시','군','구'];
-    const first = tokens[0];
-    let region = [];
-    if(TOP_LEVEL_REGIONS.has(first) || (suffixes.some(s=>first.endsWith(s)) && first.length<=6)){
-      region.push(first);
-      const second = tokens[1];
-      if(second && suffixes.some(s=>second.endsWith(s)) && second.length<=6){
-        region.push(second);
-      }
-    }
-    return region.length ? region.join(' ') : first;
+    return tokens[0];
   }
 
   async function loadOrders(){
@@ -302,8 +287,8 @@
         address: p.address || '',
         item: p.item || '',
         price: p.price != null ? String(p.price) : '',
-        referrer: p.referrer || '',
         memo: p.memo || '',
+        category: CATEGORY.includes(p.category) ? p.category : '기타',
       }));
       setState({ parsing:false, drafts: drafts.length ? drafts : [emptyDraft()] });
     }catch(e){
@@ -319,8 +304,8 @@
       address: (root.querySelector(`#f-address-${i}`)?.value || '').trim(),
       item: (root.querySelector(`#f-item-${i}`)?.value || '').trim(),
       price: root.querySelector(`#f-price-${i}`)?.value || '',
-      referrer: (root.querySelector(`#f-referrer-${i}`)?.value || '').trim(),
       memo: (root.querySelector(`#f-memo-${i}`)?.value || '').trim(),
+      category: root.querySelector(`#f-category-${i}`)?.value || '기타',
     };
   }
 
@@ -333,8 +318,8 @@
       region: extractRegion(d.address),
       item: d.item,
       price: d.price === '' ? null : Number(d.price),
-      referrer: d.referrer,
       memo: d.memo || '',
+      category: CATEGORY.includes(d.category) ? d.category : '기타',
       status: '접수',
       visitDate: null,
       completedAmount: null,
@@ -442,11 +427,15 @@
     let orders = state.orders;
     if(state.filterStatus!=='전체') orders = orders.filter(o=>o.status===state.filterStatus);
     if(state.filterRegion!=='전체') orders = orders.filter(o=>o.region===state.filterRegion);
+    if(state.filterCategory!=='전체') orders = orders.filter(o=>(o.category||'기타')===state.filterCategory);
     orders = [...orders].sort((a,b)=>b.createdAt-a.createdAt);
 
     return `
       <div class="chip-row">
         ${['전체',...STATUS].map(s=>`<div class="chip ${state.filterStatus===s?'active':''}" data-filter-status="${s}">${s}</div>`).join('')}
+      </div>
+      <div class="chip-row">
+        ${['전체',...CATEGORY].map(c=>`<div class="chip ${state.filterCategory===c?'active':''}" data-filter-category="${c}">${c}</div>`).join('')}
       </div>
       <div class="chip-row">
         ${regions.map(r=>`<div class="chip ${state.filterRegion===r?'active':''}" data-filter-region="${r}">${r}</div>`).join('')}
@@ -471,6 +460,9 @@
             <span class="ticket-region">${escapeHtml(o.region)}</span>
           </div>
           <span class="status-pill status-${o.status}">${o.status}</span>
+        </div>
+        <div style="padding:0 14px 8px;">
+          <span class="ticket-region" style="background:rgba(244,196,48,.14);color:var(--accent);">${escapeHtml(o.category || '기타')}</span>
         </div>
         <div class="ticket-cut"></div>
         <div class="ticket-bottom">
@@ -515,6 +507,10 @@
     return `
       <div style="${multi ? 'border:1px solid var(--border);border-radius:10px;padding:12px 14px 16px;margin-top:14px;' : ''}">
         ${multi ? `<div style="font-size:12px;font-weight:800;color:var(--accent);margin-bottom:2px;">주문 ${i+1}</div>` : ''}
+        <label>품목 구분</label>
+        <select id="f-category-${i}">
+          ${CATEGORY.map(c=>`<option value="${c}" ${d.category===c?'selected':''}>${c}</option>`).join('')}
+        </select>
         <label>고객명 *</label>
         <input type="text" id="f-customerName-${i}" value="${escapeAttr(d.customerName)}" placeholder="예: 김창만">
         <label>연락처</label>
@@ -525,8 +521,6 @@
         <input type="text" id="f-item-${i}" value="${escapeAttr(d.item)}" placeholder="예: 싱크볼 설치">
         <label>견적 금액</label>
         <input type="number" id="f-price-${i}" value="${escapeAttr(d.price)}" placeholder="550000">
-        <label>소개자</label>
-        <input type="text" id="f-referrer-${i}" value="${escapeAttr(d.referrer)}" placeholder="예: 경기 광주 이동희">
         <label>메모</label>
         <input type="text" id="f-memo-${i}" value="${escapeAttr(d.memo)}" placeholder="예: 낮시간 설치 가능, 8월3일 오후">
         <div class="btn-row">
@@ -571,14 +565,16 @@
 
           <label>연락처</label>
           <input type="tel" id="d-phone" value="${escapeAttr(o.phone)}">
+          <label>품목 구분</label>
+          <select id="d-category">
+            ${CATEGORY.map(c=>`<option value="${c}" ${(o.category||'기타')===c?'selected':''}>${c}</option>`).join('')}
+          </select>
           <label>주소</label>
           <input type="text" id="d-address" value="${escapeAttr(o.address)}">
           <label>제품/작업 내용</label>
           <input type="text" id="d-item" value="${escapeAttr(o.item)}">
           <label>견적 금액</label>
           <input type="number" id="d-price" value="${o.price ?? ''}">
-          <label>소개자</label>
-          <input type="text" id="d-referrer" value="${escapeAttr(o.referrer)}">
           <label>메모</label>
           <input type="text" id="d-memo" value="${escapeAttr(o.memo)}" placeholder="예: 낮시간 설치 가능, 요청사항">
 
@@ -635,6 +631,9 @@
     });
     root.querySelectorAll('[data-filter-region]').forEach(el=>{
       el.onclick = () => setState({ filterRegion: el.dataset.filterRegion });
+    });
+    root.querySelectorAll('[data-filter-category]').forEach(el=>{
+      el.onclick = () => setState({ filterCategory: el.dataset.filterCategory });
     });
     root.querySelectorAll('[data-open-detail]').forEach(el=>{
       el.onclick = () => setState({ detailId: el.dataset.openDetail });
@@ -699,8 +698,8 @@
           address: root.querySelector('#d-address').value,
           item: root.querySelector('#d-item').value,
           price: root.querySelector('#d-price').value === '' ? null : Number(root.querySelector('#d-price').value),
-          referrer: root.querySelector('#d-referrer').value,
           memo: root.querySelector('#d-memo').value,
+          category: root.querySelector('#d-category').value,
         };
         patch.region = extractRegion(patch.address);
         const visitDateEl = root.querySelector('#d-visitDate');
