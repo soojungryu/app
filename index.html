@@ -185,34 +185,58 @@
     photoPreview: null,
     parsing: false,
     parseError: null,
-    draft: emptyDraft(),
+    drafts: [],
     revStart: firstOfMonth(),
     revEnd: today(),
     loaded: false,
   };
 
   function emptyDraft(){
-    return { customerName:'', phone:'', address:'', item:'', price:'', referrer:'' };
+    return { customerName:'', phone:'', address:'', item:'', price:'', referrer:'', memo:'' };
   }
   function today(){ return new Date().toISOString().slice(0,10); }
   function firstOfMonth(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`; }
   function uid(){ return 'o_' + Date.now() + '_' + Math.random().toString(36).slice(2,8); }
   function fmtWon(n){ if(n===null||n===undefined||n==='') return '-'; return Number(n).toLocaleString('ko-KR')+'원'; }
 
+  function buildGoogleCalendarUrl(o){
+    if(!o.visitDate) return null;
+    const start = o.visitDate.replace(/-/g,'');
+    const d = new Date(o.visitDate + 'T00:00:00');
+    d.setDate(d.getDate()+1);
+    const end = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+    const title = encodeURIComponent(`${o.item || '방문'} - ${o.customerName}`);
+    const detailsLines = [
+      o.phone ? `연락처: ${o.phone}` : '',
+      o.price!=null ? `견적 금액: ${fmtWon(o.price)}` : '',
+      o.referrer ? `소개자: ${o.referrer}` : '',
+    ].filter(Boolean).join('\n');
+    const details = encodeURIComponent(detailsLines);
+    const location = encodeURIComponent(o.address || '');
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${end}&details=${details}&location=${location}`;
+  }
+
+  const TOP_LEVEL_REGIONS = new Set([
+    '서울','부산','대구','인천','광주','대전','울산','세종',
+    '서울특별시','부산광역시','대구광역시','인천광역시','광주광역시','대전광역시','울산광역시','세종특별자치시',
+    '경기','강원','충북','충남','전북','전남','경북','경남','제주',
+    '경기도','강원도','강원특별자치도','충청북도','충청남도','전라북도','전북특별자치도','전라남도','경상북도','경상남도','제주특별자치도','제주도',
+  ]);
   function extractRegion(address){
     if(!address) return '기타';
-    const tokens = address.trim().split(/\s+/);
+    const tokens = address.trim().split(/\s+/).filter(Boolean);
+    if(tokens.length===0) return '기타';
     const suffixes = ['특별자치시','특별자치도','광역시','특별시','도','시','군','구'];
+    const first = tokens[0];
     let region = [];
-    for(const t of tokens){
-      if(suffixes.some(s => t.endsWith(s)) && t.length <= 6){
-        region.push(t);
-        if(region.length===2) break;
-      } else if(region.length>0){
-        break;
+    if(TOP_LEVEL_REGIONS.has(first) || (suffixes.some(s=>first.endsWith(s)) && first.length<=6)){
+      region.push(first);
+      const second = tokens[1];
+      if(second && suffixes.some(s=>second.endsWith(s)) && second.length<=6){
+        region.push(second);
       }
     }
-    return region.length ? region.join(' ') : (tokens.slice(0,1).join(' ') || '기타');
+    return region.length ? region.join(' ') : first;
   }
 
   async function loadOrders(){
@@ -222,6 +246,13 @@
     }catch(e){
       state.orders = [];
     }
+    // 지역 추출 로직 개선분 반영: 기존 저장된 작업표도 주소 기준으로 재계산
+    let changed = false;
+    state.orders.forEach(o=>{
+      const recomputed = extractRegion(o.address);
+      if(recomputed !== o.region){ o.region = recomputed; changed = true; }
+    });
+    if(changed) saveOrders();
     state.loaded = true;
     render();
   }
@@ -250,7 +281,7 @@
     const base64 = await fileToBase64(file);
     const mediaType = file.type || 'image/jpeg';
     const previewUrl = URL.createObjectURL(file);
-    setState({ photoBase64: base64, photoMediaType: mediaType, photoPreview: previewUrl, parseError: null });
+    setState({ photoBase64: base64, photoMediaType: mediaType, photoPreview: previewUrl, parseError: null, drafts: [] });
     await parsePhoto(base64, mediaType);
   }
 
@@ -262,52 +293,89 @@
         headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ base64, mediaType })
       });
-      const parsed = await response.json();
-      if(!response.ok) throw new Error(parsed.error || '분석 결과를 받지 못했어요');
-      setState({
-        parsing:false,
-        draft:{
-          customerName: parsed.customerName || '',
-          phone: parsed.phone || '',
-          address: parsed.address || '',
-          item: parsed.item || '',
-          price: parsed.price != null ? String(parsed.price) : '',
-          referrer: parsed.referrer || '',
-        }
-      });
+      let parsed = await response.json();
+      if(!response.ok) throw new Error((parsed && parsed.error) || '분석 결과를 받지 못했어요');
+      if(!Array.isArray(parsed)) parsed = [parsed];
+      const drafts = parsed.map(p => ({
+        customerName: p.customerName || '',
+        phone: p.phone || '',
+        address: p.address || '',
+        item: p.item || '',
+        price: p.price != null ? String(p.price) : '',
+        referrer: p.referrer || '',
+        memo: p.memo || '',
+      }));
+      setState({ parsing:false, drafts: drafts.length ? drafts : [emptyDraft()] });
     }catch(e){
-      setState({ parsing:false, parseError:'자동 분석에 실패했어요. 아래에서 직접 입력해주세요.' });
+      setState({ parsing:false, parseError:'자동 분석에 실패했어요. 아래에서 직접 입력해주세요.', drafts:[emptyDraft()] });
     }
   }
 
   // ---------- actions ----------
-  function saveDraftAsOrder(){
-    const d = state.draft;
-    if(!d.customerName.trim()){
-      setState({ parseError:'고객명은 꼭 입력해주세요.' });
-      return;
-    }
-    const order = {
+  function readDraftFromInputs(i){
+    return {
+      customerName: (root.querySelector(`#f-customerName-${i}`)?.value || '').trim(),
+      phone: (root.querySelector(`#f-phone-${i}`)?.value || '').trim(),
+      address: (root.querySelector(`#f-address-${i}`)?.value || '').trim(),
+      item: (root.querySelector(`#f-item-${i}`)?.value || '').trim(),
+      price: root.querySelector(`#f-price-${i}`)?.value || '',
+      referrer: (root.querySelector(`#f-referrer-${i}`)?.value || '').trim(),
+      memo: (root.querySelector(`#f-memo-${i}`)?.value || '').trim(),
+    };
+  }
+
+  function draftToOrder(d){
+    return {
       id: uid(),
-      customerName: d.customerName.trim(),
-      phone: d.phone.trim(),
-      address: d.address.trim(),
-      region: extractRegion(d.address.trim()),
-      item: d.item.trim(),
+      customerName: d.customerName,
+      phone: d.phone,
+      address: d.address,
+      region: extractRegion(d.address),
+      item: d.item,
       price: d.price === '' ? null : Number(d.price),
-      referrer: d.referrer.trim(),
+      referrer: d.referrer,
+      memo: d.memo || '',
       status: '접수',
       visitDate: null,
       completedAmount: null,
       completedDate: null,
       createdAt: Date.now(),
     };
-    state.orders.unshift(order);
-    saveOrders();
+  }
+
+  function finishAddFlow(){
     setState({
-      tab:'list', draft: emptyDraft(), photoBase64:null, photoPreview:null,
+      tab:'list', drafts: [], photoBase64:null, photoPreview:null,
       photoMediaType:null, parseError:null, addMode:'photo'
     });
+  }
+
+  function saveDraftAsOrder(index){
+    const d = readDraftFromInputs(index);
+    if(!d.customerName){
+      setState({ parseError:'고객명은 꼭 입력해주세요.' });
+      return;
+    }
+    state.orders.unshift(draftToOrder(d));
+    saveOrders();
+    const remaining = state.drafts.filter((_,i)=>i!==index);
+    if(remaining.length===0){
+      finishAddFlow();
+    }else{
+      setState({ drafts: remaining, parseError:null });
+    }
+  }
+
+  function saveAllDrafts(){
+    const collected = state.drafts.map((_,i)=>readDraftFromInputs(i));
+    const missingIdx = collected.findIndex(d=>!d.customerName);
+    if(missingIdx !== -1){
+      setState({ parseError:`${missingIdx+1}번째 주문에 고객명을 입력해주세요.` });
+      return;
+    }
+    collected.forEach(d => state.orders.unshift(draftToOrder(d)));
+    saveOrders();
+    finishAddFlow();
   }
 
   function updateOrder(id, patch){
@@ -399,6 +467,7 @@
           <div class="ticket-main">
             <p class="ticket-name">${escapeHtml(o.customerName)}</p>
             <p class="ticket-item">${escapeHtml(o.item || '항목 미입력')}</p>
+            ${o.memo ? `<p class="ticket-item" style="color:var(--accent);">📝 ${escapeHtml(o.memo)}</p>` : ''}
             <span class="ticket-region">${escapeHtml(o.region)}</span>
           </div>
           <span class="status-pill status-${o.status}">${o.status}</span>
@@ -429,27 +498,40 @@
         ${state.parseError ? `<div class="status-msg error">${state.parseError}</div>` : ''}
       ` : ''}
 
-      ${(state.addMode==='manual' || state.photoPreview) ? draftForm() : ''}
+      ${state.drafts.length > 1 ? `<div class="status-msg" style="color:var(--accent);font-weight:700;">한 스크린샷에서 ${state.drafts.length}건의 주문이 인식됐어요. 각각 확인하고 저장해주세요.</div>` : ''}
+
+      ${state.drafts.map((d,i)=>draftForm(d,i)).join('')}
+
+      ${state.drafts.length > 1 ? `
+        <div class="btn-row">
+          <button class="btn btn-primary" data-save-all-drafts>전체 저장 (${state.drafts.length}건)</button>
+        </div>
+      ` : ''}
     `;
   }
 
-  function draftForm(){
-    const d = state.draft;
+  function draftForm(d, i){
+    const multi = state.drafts.length > 1;
     return `
-      <label>고객명 *</label>
-      <input type="text" id="f-customerName" value="${escapeAttr(d.customerName)}" placeholder="예: 김창만">
-      <label>연락처</label>
-      <input type="tel" id="f-phone" value="${escapeAttr(d.phone)}" placeholder="010-0000-0000">
-      <label>주소</label>
-      <input type="text" id="f-address" value="${escapeAttr(d.address)}" placeholder="경기 광주시 태봉로 110">
-      <label>제품/작업 내용</label>
-      <input type="text" id="f-item" value="${escapeAttr(d.item)}" placeholder="예: 싱크볼 설치">
-      <label>견적 금액</label>
-      <input type="number" id="f-price" value="${escapeAttr(d.price)}" placeholder="550000">
-      <label>소개자</label>
-      <input type="text" id="f-referrer" value="${escapeAttr(d.referrer)}" placeholder="예: 경기 광주 이동희">
-      <div class="btn-row">
-        <button class="btn btn-primary" data-save-draft>작업표 저장</button>
+      <div style="${multi ? 'border:1px solid var(--border);border-radius:10px;padding:12px 14px 16px;margin-top:14px;' : ''}">
+        ${multi ? `<div style="font-size:12px;font-weight:800;color:var(--accent);margin-bottom:2px;">주문 ${i+1}</div>` : ''}
+        <label>고객명 *</label>
+        <input type="text" id="f-customerName-${i}" value="${escapeAttr(d.customerName)}" placeholder="예: 김창만">
+        <label>연락처</label>
+        <input type="tel" id="f-phone-${i}" value="${escapeAttr(d.phone)}" placeholder="010-0000-0000">
+        <label>주소</label>
+        <input type="text" id="f-address-${i}" value="${escapeAttr(d.address)}" placeholder="경기 광주시 태봉로 110">
+        <label>제품/작업 내용</label>
+        <input type="text" id="f-item-${i}" value="${escapeAttr(d.item)}" placeholder="예: 싱크볼 설치">
+        <label>견적 금액</label>
+        <input type="number" id="f-price-${i}" value="${escapeAttr(d.price)}" placeholder="550000">
+        <label>소개자</label>
+        <input type="text" id="f-referrer-${i}" value="${escapeAttr(d.referrer)}" placeholder="예: 경기 광주 이동희">
+        <label>메모</label>
+        <input type="text" id="f-memo-${i}" value="${escapeAttr(d.memo)}" placeholder="예: 낮시간 설치 가능, 8월3일 오후">
+        <div class="btn-row">
+          <button class="btn btn-primary" data-save-draft="${i}">${multi ? '이 주문만 저장' : '작업표 저장'}</button>
+        </div>
       </div>
     `;
   }
@@ -473,6 +555,11 @@
           ${o.status==='예약' ? `
             <label>방문 예정일</label>
             <input type="date" id="d-visitDate" value="${o.visitDate||''}">
+            ${o.visitDate ? `
+              <div class="btn-row">
+                <a class="btn btn-ghost" style="text-decoration:none;text-align:center;display:block;" href="${buildGoogleCalendarUrl(o)}" target="_blank" rel="noopener">📅 구글 캘린더에 추가</a>
+              </div>
+            ` : ''}
           ` : ''}
 
           ${o.status==='완료' ? `
@@ -492,6 +579,8 @@
           <input type="number" id="d-price" value="${o.price ?? ''}">
           <label>소개자</label>
           <input type="text" id="d-referrer" value="${escapeAttr(o.referrer)}">
+          <label>메모</label>
+          <input type="text" id="d-memo" value="${escapeAttr(o.memo)}" placeholder="예: 낮시간 설치 가능, 요청사항">
 
           <div class="btn-row">
             <button class="btn btn-primary" data-save-detail="${o.id}">저장</button>
@@ -551,7 +640,12 @@
       el.onclick = () => setState({ detailId: el.dataset.openDetail });
     });
     root.querySelectorAll('[data-add-mode]').forEach(el=>{
-      el.onclick = () => setState({ addMode: el.dataset.addMode });
+      el.onclick = () => {
+        const mode = el.dataset.addMode;
+        const patch = { addMode: mode };
+        if(mode==='manual' && state.drafts.length===0) patch.drafts = [emptyDraft()];
+        setState(patch);
+      };
     });
 
     const trigger = root.querySelector('[data-trigger-upload]');
@@ -564,17 +658,12 @@
       };
     }
 
-    const saveDraftBtn = root.querySelector('[data-save-draft]');
-    if(saveDraftBtn){
-      saveDraftBtn.onclick = () => {
-        state.draft.customerName = root.querySelector('#f-customerName').value;
-        state.draft.phone = root.querySelector('#f-phone').value;
-        state.draft.address = root.querySelector('#f-address').value;
-        state.draft.item = root.querySelector('#f-item').value;
-        state.draft.price = root.querySelector('#f-price').value;
-        state.draft.referrer = root.querySelector('#f-referrer').value;
-        saveDraftAsOrder();
-      };
+    root.querySelectorAll('[data-save-draft]').forEach(el=>{
+      el.onclick = () => saveDraftAsOrder(Number(el.dataset.saveDraft));
+    });
+    const saveAllBtn = root.querySelector('[data-save-all-drafts]');
+    if(saveAllBtn){
+      saveAllBtn.onclick = () => saveAllDrafts();
     }
 
     const backdrop = root.querySelector('[data-close-detail]');
@@ -611,6 +700,7 @@
           item: root.querySelector('#d-item').value,
           price: root.querySelector('#d-price').value === '' ? null : Number(root.querySelector('#d-price').value),
           referrer: root.querySelector('#d-referrer').value,
+          memo: root.querySelector('#d-memo').value,
         };
         patch.region = extractRegion(patch.address);
         const visitDateEl = root.querySelector('#d-visitDate');
@@ -628,6 +718,18 @@
     if(deleteBtn){
       deleteBtn.onclick = () => {
         if(confirm('이 작업표를 삭제할까요?')) deleteOrder(deleteBtn.dataset.delete);
+      };
+    }
+
+    const visitDateInput = root.querySelector('#d-visitDate');
+    const calLink = root.querySelector('.oa-modal a[href*="calendar.google.com"]');
+    if(visitDateInput){
+      visitDateInput.oninput = () => {
+        const o = state.orders.find(x=>x.id===state.detailId);
+        if(!o) return;
+        const preview = { ...o, visitDate: visitDateInput.value };
+        const url = buildGoogleCalendarUrl(preview);
+        if(calLink && url) calLink.setAttribute('href', url);
       };
     }
 
