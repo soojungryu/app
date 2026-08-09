@@ -1,4 +1,4 @@
-const CACHE_NAME = 'order-app-v2';
+const CACHE_NAME = 'order-app-v4';
 const CORE_ASSETS = [
   '/',
   '/index.html',
