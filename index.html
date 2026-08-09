@@ -203,10 +203,6 @@
 
   function buildGoogleCalendarUrl(o){
     if(!o.visitDate) return null;
-    const start = o.visitDate.replace(/-/g,'');
-    const d = new Date(o.visitDate + 'T00:00:00');
-    d.setDate(d.getDate()+1);
-    const end = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
     const title = encodeURIComponent(`${o.item || '방문'} - ${o.customerName}`);
     const detailsLines = [
       o.phone ? `연락처: ${o.phone}` : '',
@@ -214,6 +210,21 @@
     ].filter(Boolean).join('\n');
     const details = encodeURIComponent(detailsLines);
     const location = encodeURIComponent(o.address || '');
+
+    if(o.visitTime){
+      const [h,m] = o.visitTime.split(':').map(Number);
+      const startD = new Date(o.visitDate + 'T00:00:00');
+      startD.setHours(h, m, 0, 0);
+      const endD = new Date(startD.getTime() + 60*60*1000); // 1시간 기본 소요
+      const fmt = (dt) => `${dt.getFullYear()}${String(dt.getMonth()+1).padStart(2,'0')}${String(dt.getDate()).padStart(2,'0')}T${String(dt.getHours()).padStart(2,'0')}${String(dt.getMinutes()).padStart(2,'0')}00`;
+      const dates = `${fmt(startD)}/${fmt(endD)}`;
+      return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${dates}&details=${details}&location=${location}&ctz=Asia/Seoul`;
+    }
+
+    const start = o.visitDate.replace(/-/g,'');
+    const d = new Date(o.visitDate + 'T00:00:00');
+    d.setDate(d.getDate()+1);
+    const end = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
     return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${end}&details=${details}&location=${location}`;
   }
 
@@ -322,6 +333,7 @@
       category: CATEGORY.includes(d.category) ? d.category : '기타',
       status: '접수',
       visitDate: null,
+      visitTime: null,
       completedAmount: null,
       completedDate: null,
       createdAt: Date.now(),
@@ -467,7 +479,7 @@
         <div class="ticket-cut"></div>
         <div class="ticket-bottom">
           <span class="ticket-price mono">${o.status==='완료' ? fmtWon(o.completedAmount) : fmtWon(o.price)}</span>
-          <span class="ticket-date mono">${o.visitDate || (o.status==='완료' ? o.completedDate : '') || ''}</span>
+          <span class="ticket-date mono">${o.visitDate ? (o.visitDate + (o.visitTime ? ' ' + o.visitTime : '')) : (o.status==='완료' ? o.completedDate : '') || ''}</span>
         </div>
       </div>
     `;
@@ -549,6 +561,8 @@
           ${o.status==='예약' ? `
             <label>방문 예정일</label>
             <input type="date" id="d-visitDate" value="${o.visitDate||''}">
+            <label>방문 예정 시간 (선택)</label>
+            <input type="time" id="d-visitTime" value="${o.visitTime||''}">
             ${o.visitDate ? `
               <div class="btn-row">
                 <a class="btn btn-ghost" style="text-decoration:none;text-align:center;display:block;" href="${buildGoogleCalendarUrl(o)}" target="_blank" rel="noopener">📅 구글 캘린더에 추가</a>
@@ -704,6 +718,8 @@
         patch.region = extractRegion(patch.address);
         const visitDateEl = root.querySelector('#d-visitDate');
         if(visitDateEl) patch.visitDate = visitDateEl.value || null;
+        const visitTimeEl = root.querySelector('#d-visitTime');
+        if(visitTimeEl) patch.visitTime = visitTimeEl.value || null;
         const compDateEl = root.querySelector('#d-completedDate');
         if(compDateEl) patch.completedDate = compDateEl.value || null;
         const compAmtEl = root.querySelector('#d-completedAmount');
@@ -721,16 +737,21 @@
     }
 
     const visitDateInput = root.querySelector('#d-visitDate');
+    const visitTimeInput = root.querySelector('#d-visitTime');
     const calLink = root.querySelector('.oa-modal a[href*="calendar.google.com"]');
-    if(visitDateInput){
-      visitDateInput.oninput = () => {
-        const o = state.orders.find(x=>x.id===state.detailId);
-        if(!o) return;
-        const preview = { ...o, visitDate: visitDateInput.value };
-        const url = buildGoogleCalendarUrl(preview);
-        if(calLink && url) calLink.setAttribute('href', url);
+    const refreshCalLink = () => {
+      const o = state.orders.find(x=>x.id===state.detailId);
+      if(!o) return;
+      const preview = {
+        ...o,
+        visitDate: visitDateInput ? visitDateInput.value : o.visitDate,
+        visitTime: visitTimeInput ? visitTimeInput.value : o.visitTime,
       };
-    }
+      const url = buildGoogleCalendarUrl(preview);
+      if(calLink && url) calLink.setAttribute('href', url);
+    };
+    if(visitDateInput) visitDateInput.oninput = refreshCalLink;
+    if(visitTimeInput) visitTimeInput.oninput = refreshCalLink;
 
     const revStart = root.querySelector('#rev-start');
     const revEnd = root.querySelector('#rev-end');
