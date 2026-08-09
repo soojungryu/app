@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>설치 작업표</title>
+<meta name="description" content="설치 기사용 작업표 관리 앱">
+<meta name="theme-color" content="#f4c430">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="작업표">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+  :root{
+    --bg:#15171c;
+    --surface:#1e2128;
+    --surface2:#262a33;
+    --border:#33373f;
+    --text:#eeeef0;
+    --text-dim:#93969e;
+    --accent:#f4c430;
+    --accent-ink:#1a1a14;
+    --new:#8b8f99;
+    --scheduled:#4c8dff;
+    --done:#34c77b;
+    --danger:#ff6b6b;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);}
+  #order-app{
+    font-family:'Noto Sans KR',sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    min-height:100vh;
+    max-width:480px;
+    margin:0 auto;
+    position:relative;
+    padding-bottom:76px;
+    overflow:hidden;
+  }
+  .mono{font-family:'JetBrains Mono',monospace;}
+
+  /* header */
+  .oa-header{
+    padding:18px 18px 14px;
+    display:flex;justify-content:space-between;align-items:baseline;
+    border-bottom:1px solid var(--border);
+  }
+  .oa-header h1{font-size:17px;font-weight:900;margin:0;letter-spacing:-0.02em;}
+  .oa-header .date{font-size:11px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;}
+
+  .oa-body{padding:14px 16px 8px;min-height:420px;}
+
+  /* filter chips */
+  .chip-row{display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;margin-bottom:12px;border-bottom:1px dashed var(--border);}
+  .chip{
+    flex:none;padding:6px 12px;border-radius:20px;font-size:12px;font-weight:600;
+    background:var(--surface2);color:var(--text-dim);border:1px solid var(--border);cursor:pointer;white-space:nowrap;
+  }
+  .chip.active{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);}
+
+  /* order ticket card */
+  .ticket{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:10px;
+    margin-bottom:10px;
+    overflow:hidden;
+    cursor:pointer;
+    position:relative;
+    transition:transform .12s ease;
+  }
+  .ticket:active{transform:scale(0.98);}
+  .ticket-top{padding:12px 14px 10px;display:flex;justify-content:space-between;gap:8px;}
+  .ticket-main{flex:1;min-width:0;}
+  .ticket-name{font-size:15px;font-weight:700;margin:0 0 2px;}
+  .ticket-item{font-size:12.5px;color:var(--text-dim);}
+  .ticket-region{display:inline-block;margin-top:6px;font-size:11px;background:var(--surface2);color:var(--text-dim);padding:2px 8px;border-radius:12px;}
+  .status-pill{flex:none;font-size:11px;font-weight:700;padding:4px 9px;border-radius:20px;height:fit-content;}
+  .status-접수{background:rgba(139,143,153,.18);color:var(--new);}
+  .status-예약{background:rgba(76,141,255,.18);color:var(--scheduled);}
+  .status-완료{background:rgba(52,199,123,.18);color:var(--done);}
+  .ticket-cut{border-top:1px dashed var(--border);margin:0 14px;}
+  .ticket-bottom{padding:9px 14px 12px;display:flex;justify-content:space-between;align-items:center;}
+  .ticket-price{font-size:14px;font-weight:700;}
+  .ticket-date{font-size:11px;color:var(--text-dim);}
+
+  .empty-state{text-align:center;padding:60px 20px;color:var(--text-dim);font-size:13px;line-height:1.7;}
+  .empty-state .big{font-size:30px;margin-bottom:10px;}
+
+  /* bottom nav */
+  .oa-nav{
+    position:absolute;bottom:0;left:0;right:0;
+    display:flex;background:var(--surface);border-top:1px solid var(--border);
+  }
+  .oa-nav button{
+    flex:1;background:none;border:none;color:var(--text-dim);
+    padding:11px 0 9px;font-family:inherit;font-size:11px;font-weight:600;
+    display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;
+  }
+  .oa-nav button.active{color:var(--accent);}
+  .oa-nav svg{width:20px;height:20px;}
+
+  /* forms */
+  label{display:block;font-size:12px;font-weight:600;color:var(--text-dim);margin:14px 0 6px;}
+  input[type=text],input[type=tel],input[type=number],input[type=date],textarea,select{
+    width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);
+    padding:11px 12px;border-radius:8px;font-family:'Noto Sans KR',sans-serif;font-size:14px;
+  }
+  input:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px;}
+  .btn{
+    width:100%;padding:13px;border-radius:9px;border:none;font-weight:700;font-size:14px;
+    cursor:pointer;font-family:inherit;
+  }
+  .btn-primary{background:var(--accent);color:var(--accent-ink);}
+  .btn-primary:disabled{opacity:.5;cursor:default;}
+  .btn-ghost{background:var(--surface2);color:var(--text);border:1px solid var(--border);}
+  .btn-danger{background:rgba(255,107,107,.12);color:var(--danger);border:1px solid rgba(255,107,107,.3);}
+  .btn-row{display:flex;gap:8px;margin-top:14px;}
+  .btn-row .btn{flex:1;}
+
+  .toggle-row{display:flex;gap:8px;margin-bottom:6px;}
+  .toggle-row button{
+    flex:1;padding:9px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);
+    color:var(--text-dim);font-weight:600;font-size:12.5px;font-family:inherit;cursor:pointer;
+  }
+  .toggle-row button.active{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);}
+
+  .upload-box{
+    border:1.5px dashed var(--border);border-radius:10px;padding:22px;text-align:center;
+    color:var(--text-dim);font-size:12.5px;cursor:pointer;background:var(--surface2);
+  }
+  .upload-box img{max-width:100%;max-height:180px;border-radius:8px;margin-bottom:8px;}
+  .status-msg{font-size:12px;text-align:center;padding:8px;color:var(--text-dim);}
+  .status-msg.error{color:var(--danger);}
+
+  /* modal */
+  .oa-modal-backdrop{
+    position:absolute;inset:0;background:rgba(0,0,0,.55);z-index:20;
+    display:flex;align-items:flex-end;
+  }
+  .oa-modal{
+    background:var(--bg);width:100%;max-height:88%;overflow-y:auto;
+    border-radius:16px 16px 0 0;padding:18px 18px 24px;border-top:1px solid var(--border);
+  }
+  .oa-modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;}
+  .oa-modal-head h2{font-size:16px;margin:0;font-weight:800;}
+  .close-x{background:none;border:none;color:var(--text-dim);font-size:20px;cursor:pointer;padding:4px;}
+
+  /* revenue */
+  .rev-range{display:flex;gap:8px;align-items:center;margin-bottom:16px;}
+  .rev-range input{flex:1;}
+  .rev-total-card{
+    background:linear-gradient(135deg,var(--surface2),var(--surface));
+    border:1px solid var(--border);border-radius:12px;padding:20px;text-align:center;margin-bottom:16px;
+  }
+  .rev-total-card .label{font-size:12px;color:var(--text-dim);margin-bottom:4px;}
+  .rev-total-card .amount{font-size:30px;font-weight:900;color:var(--accent);}
+  .rev-total-card .count{font-size:12px;color:var(--text-dim);margin-top:4px;}
+  .rev-row{display:flex;justify-content:space-between;padding:10px 2px;border-bottom:1px solid var(--border);font-size:13px;}
+  .rev-row .name{font-weight:600;}
+  .rev-row .date{color:var(--text-dim);font-size:11px;}
+</style>
+</head>
+<body>
+<div id="order-app"></div>
+
+<script>
+(function(){
+  const root = document.getElementById('order-app');
+
+  const STATUS = ['접수','예약','완료'];
+  const CATEGORY = ['씽크볼','분쇄기','기타'];
+  let state = {
+    tab: 'list',
+    orders: [],
+    filterStatus: '전체',
+    filterRegion: '전체',
+    filterCategory: '전체',
+    detailId: null,
+    addMode: 'photo', // photo | manual
+    photoBase64: null,
+    photoMediaType: null,
+    photoPreview: null,
+    parsing: false,
+    parseError: null,
+    drafts: [],
+    revStart: firstOfMonth(),
+    revEnd: today(),
+    loaded: false,
+  };
+
+  function emptyDraft(){
+    return { customerName:'', phone:'', address:'', item:'', price:'', memo:'', category:'기타' };
+  }
+  function today(){ return new Date().toISOString().slice(0,10); }
+  function firstOfMonth(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`; }
+  function uid(){ return 'o_' + Date.now() + '_' + Math.random().toString(36).slice(2,8); }
+  function fmtWon(n){ if(n===null||n===undefined||n==='') return '-'; return Number(n).toLocaleString('ko-KR')+'원'; }
+
+  function buildGoogleCalendarUrl(o){
+    if(!o.visitDate) return null;
+    const title = encodeURIComponent(`${o.item || '방문'} - ${o.customerName}`);
+    const detailsLines = [
+      o.phone ? `연락처: ${o.phone}` : '',
+      o.price!=null ? `견적 금액: ${fmtWon(o.price)}` : '',
+    ].filter(Boolean).join('\n');
+    const details = encodeURIComponent(detailsLines);
+    const location = encodeURIComponent(o.address || '');
+
+    if(o.visitTime){
+      const [h,m] = o.visitTime.split(':').map(Number);
+      const startD = new Date(o.visitDate + 'T00:00:00');
+      startD.setHours(h, m, 0, 0);
+      const endD = new Date(startD.getTime() + 60*60*1000); // 1시간 기본 소요
+      const fmt = (dt) => `${dt.getFullYear()}${String(dt.getMonth()+1).padStart(2,'0')}${String(dt.getDate()).padStart(2,'0')}T${String(dt.getHours()).padStart(2,'0')}${String(dt.getMinutes()).padStart(2,'0')}00`;
+      const dates = `${fmt(startD)}/${fmt(endD)}`;
+      return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${dates}&details=${details}&location=${location}&ctz=Asia/Seoul`;
+    }
+
+    const start = o.visitDate.replace(/-/g,'');
+    const d = new Date(o.visitDate + 'T00:00:00');
+    d.setDate(d.getDate()+1);
+    const end = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${end}&details=${details}&location=${location}`;
+  }
+
+  function extractRegion(address){
+    if(!address) return '기타';
+    const tokens = address.trim().split(/\s+/).filter(Boolean);
+    if(tokens.length===0) return '기타';
+    return tokens[0];
+  }
+
+  async function loadOrders(){
+    try{
+      const raw = localStorage.getItem('orders-list');
+      state.orders = raw ? JSON.parse(raw) : [];
+    }catch(e){
+      state.orders = [];
+    }
+    // 지역 추출 로직 개선분 반영: 기존 저장된 작업표도 주소 기준으로 재계산
+    let changed = false;
+    state.orders.forEach(o=>{
+      const recomputed = extractRegion(o.address);
+      if(recomputed !== o.region){ o.region = recomputed; changed = true; }
+    });
+    if(changed) saveOrders();
+    state.loaded = true;
+    render();
+  }
+  async function saveOrders(){
+    try{
+      localStorage.setItem('orders-list', JSON.stringify(state.orders));
+    }catch(e){
+      console.error('저장 실패', e);
+    }
+  }
+
+  function setState(patch){ Object.assign(state, patch); render(); }
+
+  // ---------- image parsing ----------
+  function fileToBase64(file){
+    return new Promise((resolve,reject)=>{
+      const r = new FileReader();
+      r.onload = () => resolve(r.result.split(',')[1]);
+      r.onerror = () => reject(new Error('파일을 읽지 못했어요'));
+      r.readAsDataURL(file);
+    });
+  }
+
+  async function handlePhotoSelected(file){
+    if(!file) return;
+    const base64 = await fileToBase64(file);
+    const mediaType = file.type || 'image/jpeg';
+    const previewUrl = URL.createObjectURL(file);
+    setState({ photoBase64: base64, photoMediaType: mediaType, photoPreview: previewUrl, parseError: null, drafts: [] });
+    await parsePhoto(base64, mediaType);
+  }
+
+  async function parsePhoto(base64, mediaType){
+    setState({ parsing:true, parseError:null });
+    try{
+      const response = await fetch('/api/parse-order', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ base64, mediaType })
+      });
+      let parsed = await response.json();
+      if(!response.ok) throw new Error((parsed && parsed.error) || '분석 결과를 받지 못했어요');
+      if(!Array.isArray(parsed)) parsed = [parsed];
+      const drafts = parsed.map(p => ({
+        customerName: p.customerName || '',
+        phone: p.phone || '',
+        address: p.address || '',
+        item: p.item || '',
+        price: p.price != null ? String(p.price) : '',
+        memo: p.memo || '',
+        category: CATEGORY.includes(p.category) ? p.category : '기타',
+      }));
+      setState({ parsing:false, drafts: drafts.length ? drafts : [emptyDraft()] });
+    }catch(e){
+      setState({ parsing:false, parseError:'자동 분석에 실패했어요. 아래에서 직접 입력해주세요.', drafts:[emptyDraft()] });
+    }
+  }
+
+  // ---------- actions ----------
+  function readDraftFromInputs(i){
+    return {
+      customerName: (root.querySelector(`#f-customerName-${i}`)?.value || '').trim(),
+      phone: (root.querySelector(`#f-phone-${i}`)?.value || '').trim(),
+      address: (root.querySelector(`#f-address-${i}`)?.value || '').trim(),
+      item: (root.querySelector(`#f-item-${i}`)?.value || '').trim(),
+      price: root.querySelector(`#f-price-${i}`)?.value || '',
+      memo: (root.querySelector(`#f-memo-${i}`)?.value || '').trim(),
+      category: root.querySelector(`#f-category-${i}`)?.value || '기타',
+    };
+  }
+
+  function draftToOrder(d){
+    return {
+      id: uid(),
+      customerName: d.customerName,
+      phone: d.phone,
+      address: d.address,
+      region: extractRegion(d.address),
+      item: d.item,
+      price: d.price === '' ? null : Number(d.price),
+      memo: d.memo || '',
+      category: CATEGORY.includes(d.category) ? d.category : '기타',
+      status: '접수',
+      visitDate: null,
+      visitTime: null,
+      completedAmount: null,
+      completedDate: null,
+      createdAt: Date.now(),
+    };
+  }
+
+  function finishAddFlow(){
+    setState({
+      tab:'list', drafts: [], photoBase64:null, photoPreview:null,
+      photoMediaType:null, parseError:null, addMode:'photo'
+    });
+  }
+
+  function saveDraftAsOrder(index){
+    const d = readDraftFromInputs(index);
+    if(!d.customerName){
+      setState({ parseError:'고객명은 꼭 입력해주세요.' });
+      return;
+    }
+    state.orders.unshift(draftToOrder(d));
+    saveOrders();
+    const remaining = state.drafts.filter((_,i)=>i!==index);
+    if(remaining.length===0){
+      finishAddFlow();
+    }else{
+      setState({ drafts: remaining, parseError:null });
+    }
+  }
+
+  function saveAllDrafts(){
+    const collected = state.drafts.map((_,i)=>readDraftFromInputs(i));
+    const missingIdx = collected.findIndex(d=>!d.customerName);
+    if(missingIdx !== -1){
+      setState({ parseError:`${missingIdx+1}번째 주문에 고객명을 입력해주세요.` });
+      return;
+    }
+    collected.forEach(d => state.orders.unshift(draftToOrder(d)));
+    saveOrders();
+    finishAddFlow();
+  }
+
+  function updateOrder(id, patch){
+    const idx = state.orders.findIndex(o=>o.id===id);
+    if(idx===-1) return;
+    state.orders[idx] = { ...state.orders[idx], ...patch };
+    saveOrders();
+    render();
+  }
+
+  function deleteOrder(id){
+    state.orders = state.orders.filter(o=>o.id!==id);
+    saveOrders();
+    setState({ detailId:null });
+  }
+
+  // ---------- render ----------
+  function render(){
+    root.innerHTML = `
+      ${header()}
+      <div class="oa-body">${tabContent()}</div>
+      ${nav()}
+      ${state.detailId ? detailModal() : ''}
+    `;
+    bindEvents();
+  }
+
+  function header(){
+    const titles = { list:'설치 작업표', add:'작업표 등록', revenue:'매출 조회' };
+    const d = new Date();
+    return `
+      <div class="oa-header">
+        <h1>${titles[state.tab]}</h1>
+        <span class="date mono">${d.getMonth()+1}.${d.getDate()}</span>
+      </div>
+    `;
+  }
+
+  function nav(){
+    const items = [
+      { key:'list', label:'목록', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="4" rx="1"/><rect x="3" y="10" width="18" height="4" rx="1"/><rect x="3" y="16" width="18" height="4" rx="1"/></svg>' },
+      { key:'add', label:'등록', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>' },
+      { key:'revenue', label:'매출', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>' },
+    ];
+    return `<div class="oa-nav">
+      ${items.map(it=>`
+        <button data-nav="${it.key}" class="${state.tab===it.key?'active':''}">
+          ${it.icon}<span>${it.label}</span>
+        </button>
+      `).join('')}
+    </div>`;
+  }
+
+  function tabContent(){
+    if(!state.loaded) return `<div class="status-msg">불러오는 중...</div>`;
+    if(state.tab==='list') return listView();
+    if(state.tab==='add') return addView();
+    if(state.tab==='revenue') return revenueView();
+    return '';
+  }
+
+  function listView(){
+    const regions = ['전체', ...new Set(state.orders.map(o=>o.region))];
+    let orders = state.orders;
+    if(state.filterStatus!=='전체') orders = orders.filter(o=>o.status===state.filterStatus);
+    if(state.filterRegion!=='전체') orders = orders.filter(o=>o.region===state.filterRegion);
+    if(state.filterCategory!=='전체') orders = orders.filter(o=>(o.category||'기타')===state.filterCategory);
+    orders = [...orders].sort((a,b)=>b.createdAt-a.createdAt);
+
+    return `
+      <div class="chip-row">
+        ${['전체',...STATUS].map(s=>`<div class="chip ${state.filterStatus===s?'active':''}" data-filter-status="${s}">${s}</div>`).join('')}
+      </div>
+      <div class="chip-row">
+        ${['전체',...CATEGORY].map(c=>`<div class="chip ${state.filterCategory===c?'active':''}" data-filter-category="${c}">${c}</div>`).join('')}
+      </div>
+      <div class="chip-row">
+        ${regions.map(r=>`<div class="chip ${state.filterRegion===r?'active':''}" data-filter-region="${r}">${r}</div>`).join('')}
+      </div>
+      ${orders.length===0 ? `
+        <div class="empty-state">
+          <div class="big">📋</div>
+          아직 등록된 작업표가 없어요.<br/>아래 '등록' 탭에서 카톡 캡처를 올려보세요.
+        </div>
+      ` : orders.map(ticketCard).join('')}
+    `;
+  }
+
+  function ticketCard(o){
+    return `
+      <div class="ticket" data-open-detail="${o.id}">
+        <div class="ticket-top">
+          <div class="ticket-main">
+            <p class="ticket-name">${escapeHtml(o.customerName)}</p>
+            <p class="ticket-item">${escapeHtml(o.item || '항목 미입력')}</p>
+            ${o.memo ? `<p class="ticket-item" style="color:var(--accent);">📝 ${escapeHtml(o.memo)}</p>` : ''}
+            <span class="ticket-region">${escapeHtml(o.region)}</span>
+          </div>
+          <span class="status-pill status-${o.status}">${o.status}</span>
+        </div>
+        <div style="padding:0 14px 8px;">
+          <span class="ticket-region" style="background:rgba(244,196,48,.14);color:var(--accent);">${escapeHtml(o.category || '기타')}</span>
+        </div>
+        <div class="ticket-cut"></div>
+        <div class="ticket-bottom">
+          <span class="ticket-price mono">${o.status==='완료' ? fmtWon(o.completedAmount) : fmtWon(o.price)}</span>
+          <span class="ticket-date mono">${o.visitDate ? (o.visitDate + (o.visitTime ? ' ' + o.visitTime : '')) : (o.status==='완료' ? o.completedDate : '') || ''}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  function addView(){
+    return `
+      <div class="toggle-row">
+        <button data-add-mode="photo" class="${state.addMode==='photo'?'active':''}">📷 사진으로 추가</button>
+        <button data-add-mode="manual" class="${state.addMode==='manual'?'active':''}">✏️ 직접 입력</button>
+      </div>
+
+      ${state.addMode==='photo' ? `
+        <label>카톡 주문 스크린샷</label>
+        <div class="upload-box" data-trigger-upload>
+          ${state.photoPreview ? `<img src="${state.photoPreview}"/><div>사진을 눌러 다시 선택</div>` : `탭해서 스크린샷 선택`}
+        </div>
+        <input type="file" accept="image/*" id="photo-input" style="display:none;">
+        ${state.parsing ? `<div class="status-msg">AI가 내용을 읽는 중...</div>` : ''}
+        ${state.parseError ? `<div class="status-msg error">${state.parseError}</div>` : ''}
+      ` : ''}
+
+      ${state.drafts.length > 1 ? `<div class="status-msg" style="color:var(--accent);font-weight:700;">한 스크린샷에서 ${state.drafts.length}건의 주문이 인식됐어요. 각각 확인하고 저장해주세요.</div>` : ''}
+
+      ${state.drafts.map((d,i)=>draftForm(d,i)).join('')}
+
+      ${state.drafts.length > 1 ? `
+        <div class="btn-row">
+          <button class="btn btn-primary" data-save-all-drafts>전체 저장 (${state.drafts.length}건)</button>
+        </div>
+      ` : ''}
+    `;
+  }
+
+  function draftForm(d, i){
+    const multi = state.drafts.length > 1;
+    return `
+      <div style="${multi ? 'border:1px solid var(--border);border-radius:10px;padding:12px 14px 16px;margin-top:14px;' : ''}">
+        ${multi ? `<div style="font-size:12px;font-weight:800;color:var(--accent);margin-bottom:2px;">주문 ${i+1}</div>` : ''}
+        <label>품목 구분</label>
+        <select id="f-category-${i}">
+          ${CATEGORY.map(c=>`<option value="${c}" ${d.category===c?'selected':''}>${c}</option>`).join('')}
+        </select>
+        <label>고객명 *</label>
+        <input type="text" id="f-customerName-${i}" value="${escapeAttr(d.customerName)}" placeholder="예: 김창만">
+        <label>연락처</label>
+        <input type="tel" id="f-phone-${i}" value="${escapeAttr(d.phone)}" placeholder="010-0000-0000">
+        <label>주소</label>
+        <input type="text" id="f-address-${i}" value="${escapeAttr(d.address)}" placeholder="경기 광주시 태봉로 110">
+        <label>제품/작업 내용</label>
+        <input type="text" id="f-item-${i}" value="${escapeAttr(d.item)}" placeholder="예: 싱크볼 설치">
+        <label>견적 금액</label>
+        <input type="number" id="f-price-${i}" value="${escapeAttr(d.price)}" placeholder="550000">
+        <label>메모</label>
+        <input type="text" id="f-memo-${i}" value="${escapeAttr(d.memo)}" placeholder="예: 낮시간 설치 가능, 8월3일 오후">
+        <div class="btn-row">
+          <button class="btn btn-primary" data-save-draft="${i}">${multi ? '이 주문만 저장' : '작업표 저장'}</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function detailModal(){
+    const o = state.orders.find(x=>x.id===state.detailId);
+    if(!o) return '';
+    return `
+      <div class="oa-modal-backdrop" data-close-detail>
+        <div class="oa-modal" data-stop>
+          <div class="oa-modal-head">
+            <h2>${escapeHtml(o.customerName)}</h2>
+            <button class="close-x" data-close-detail>✕</button>
+          </div>
+
+          <label>상태</label>
+          <div class="toggle-row">
+            ${STATUS.map(s=>`<button data-set-status="${s}" class="${o.status===s?'active':''}">${s}</button>`).join('')}
+          </div>
+
+          ${o.status==='예약' ? `
+            <label>방문 예정일</label>
+            <input type="date" id="d-visitDate" value="${o.visitDate||''}">
+            <label>방문 예정 시간 (선택)</label>
+            <input type="time" id="d-visitTime" value="${o.visitTime||''}">
+            ${o.visitDate ? `
+              <div class="btn-row">
+                <a class="btn btn-ghost" style="text-decoration:none;text-align:center;display:block;" href="${buildGoogleCalendarUrl(o)}" target="_blank" rel="noopener">📅 구글 캘린더에 추가</a>
+              </div>
+            ` : ''}
+          ` : ''}
+
+          ${o.status==='완료' ? `
+            <label>작업 완료일</label>
+            <input type="date" id="d-completedDate" value="${o.completedDate || o.visitDate || today()}">
+            <label>실 작업 금액</label>
+            <input type="number" id="d-completedAmount" value="${o.completedAmount ?? ''}" placeholder="${o.price || ''}">
+          ` : ''}
+
+          <label>연락처</label>
+          <input type="tel" id="d-phone" value="${escapeAttr(o.phone)}">
+          <label>품목 구분</label>
+          <select id="d-category">
+            ${CATEGORY.map(c=>`<option value="${c}" ${(o.category||'기타')===c?'selected':''}>${c}</option>`).join('')}
+          </select>
+          <label>주소</label>
+          <input type="text" id="d-address" value="${escapeAttr(o.address)}">
+          <label>제품/작업 내용</label>
+          <input type="text" id="d-item" value="${escapeAttr(o.item)}">
+          <label>견적 금액</label>
+          <input type="number" id="d-price" value="${o.price ?? ''}">
+          <label>메모</label>
+          <input type="text" id="d-memo" value="${escapeAttr(o.memo)}" placeholder="예: 낮시간 설치 가능, 요청사항">
+
+          <div class="btn-row">
+            <button class="btn btn-primary" data-save-detail="${o.id}">저장</button>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-danger" data-delete="${o.id}">작업표 삭제</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function revenueView(){
+    const completed = state.orders.filter(o=>o.status==='완료' && o.completedDate);
+    const inRange = completed.filter(o=> o.completedDate >= state.revStart && o.completedDate <= state.revEnd);
+    const total = inRange.reduce((sum,o)=> sum + (Number(o.completedAmount||0)), 0);
+    const sorted = [...inRange].sort((a,b)=> b.completedDate.localeCompare(a.completedDate));
+
+    return `
+      <div class="rev-range">
+        <input type="date" id="rev-start" value="${state.revStart}">
+        <span class="mono" style="color:var(--text-dim)">~</span>
+        <input type="date" id="rev-end" value="${state.revEnd}">
+      </div>
+      <div class="rev-total-card">
+        <div class="label">기간 내 완료 매출</div>
+        <div class="amount mono">${total.toLocaleString('ko-KR')}원</div>
+        <div class="count">완료 작업 ${inRange.length}건</div>
+      </div>
+      ${sorted.length===0 ? `<div class="empty-state">해당 기간에 완료된 작업이 없어요.</div>` : sorted.map(o=>`
+        <div class="rev-row">
+          <div>
+            <div class="name">${escapeHtml(o.customerName)} · ${escapeHtml(o.item||'')}</div>
+            <div class="date mono">${o.completedDate} · ${escapeHtml(o.region)}</div>
+          </div>
+          <div class="mono">${fmtWon(o.completedAmount)}</div>
+        </div>
+      `).join('')}
+    `;
+  }
+
+  function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+  function escapeAttr(s){ return escapeHtml(String(s ?? '')); }
+
+  // ---------- events ----------
+  function bindEvents(){
+    root.querySelectorAll('[data-nav]').forEach(el=>{
+      el.onclick = () => setState({ tab: el.dataset.nav });
+    });
+    root.querySelectorAll('[data-filter-status]').forEach(el=>{
+      el.onclick = () => setState({ filterStatus: el.dataset.filterStatus });
+    });
+    root.querySelectorAll('[data-filter-region]').forEach(el=>{
+      el.onclick = () => setState({ filterRegion: el.dataset.filterRegion });
+    });
+    root.querySelectorAll('[data-filter-category]').forEach(el=>{
+      el.onclick = () => setState({ filterCategory: el.dataset.filterCategory });
+    });
+    root.querySelectorAll('[data-open-detail]').forEach(el=>{
+      el.onclick = () => setState({ detailId: el.dataset.openDetail });
+    });
+    root.querySelectorAll('[data-add-mode]').forEach(el=>{
+      el.onclick = () => {
+        const mode = el.dataset.addMode;
+        const patch = { addMode: mode };
+        if(mode==='manual' && state.drafts.length===0) patch.drafts = [emptyDraft()];
+        setState(patch);
+      };
+    });
+
+    const trigger = root.querySelector('[data-trigger-upload]');
+    const photoInput = root.querySelector('#photo-input');
+    if(trigger && photoInput){
+      trigger.onclick = () => photoInput.click();
+      photoInput.onchange = (e) => {
+        const file = e.target.files[0];
+        if(file) handlePhotoSelected(file);
+      };
+    }
+
+    root.querySelectorAll('[data-save-draft]').forEach(el=>{
+      el.onclick = () => saveDraftAsOrder(Number(el.dataset.saveDraft));
+    });
+    const saveAllBtn = root.querySelector('[data-save-all-drafts]');
+    if(saveAllBtn){
+      saveAllBtn.onclick = () => saveAllDrafts();
+    }
+
+    const backdrop = root.querySelector('[data-close-detail]');
+    if(backdrop){
+      root.querySelectorAll('[data-close-detail]').forEach(el=>{
+        el.onclick = (e) => { if(e.target === el) setState({ detailId:null }); };
+      });
+      const modal = root.querySelector('[data-stop]');
+      if(modal) modal.onclick = (e) => e.stopPropagation();
+    }
+
+    root.querySelectorAll('[data-set-status]').forEach(el=>{
+      el.onclick = () => {
+        const id = state.detailId;
+        const newStatus = el.dataset.setStatus;
+        const patch = { status: newStatus };
+        if(newStatus==='완료'){
+          const o = state.orders.find(x=>x.id===id);
+          if(!o.completedDate) patch.completedDate = o.visitDate || today();
+          if(o.completedAmount==null) patch.completedAmount = o.price;
+        }
+        updateOrder(id, patch);
+        setState({});
+      };
+    });
+
+    const saveDetailBtn = root.querySelector('[data-save-detail]');
+    if(saveDetailBtn){
+      saveDetailBtn.onclick = () => {
+        const id = saveDetailBtn.dataset.saveDetail;
+        const patch = {
+          phone: root.querySelector('#d-phone').value,
+          address: root.querySelector('#d-address').value,
+          item: root.querySelector('#d-item').value,
+          price: root.querySelector('#d-price').value === '' ? null : Number(root.querySelector('#d-price').value),
+          memo: root.querySelector('#d-memo').value,
+          category: root.querySelector('#d-category').value,
+        };
+        patch.region = extractRegion(patch.address);
+        const visitDateEl = root.querySelector('#d-visitDate');
+        if(visitDateEl) patch.visitDate = visitDateEl.value || null;
+        const visitTimeEl = root.querySelector('#d-visitTime');
+        if(visitTimeEl) patch.visitTime = visitTimeEl.value || null;
+        const compDateEl = root.querySelector('#d-completedDate');
+        if(compDateEl) patch.completedDate = compDateEl.value || null;
+        const compAmtEl = root.querySelector('#d-completedAmount');
+        if(compAmtEl) patch.completedAmount = compAmtEl.value === '' ? null : Number(compAmtEl.value);
+        updateOrder(id, patch);
+        setState({ detailId:null });
+      };
+    }
+
+    const deleteBtn = root.querySelector('[data-delete]');
+    if(deleteBtn){
+      deleteBtn.onclick = () => {
+        if(confirm('이 작업표를 삭제할까요?')) deleteOrder(deleteBtn.dataset.delete);
+      };
+    }
+
+    const visitDateInput = root.querySelector('#d-visitDate');
+    const visitTimeInput = root.querySelector('#d-visitTime');
+    const calLink = root.querySelector('.oa-modal a[href*="calendar.google.com"]');
+    const refreshCalLink = () => {
+      const o = state.orders.find(x=>x.id===state.detailId);
+      if(!o) return;
+      const preview = {
+        ...o,
+        visitDate: visitDateInput ? visitDateInput.value : o.visitDate,
+        visitTime: visitTimeInput ? visitTimeInput.value : o.visitTime,
+      };
+      const url = buildGoogleCalendarUrl(preview);
+      if(calLink && url) calLink.setAttribute('href', url);
+    };
+    if(visitDateInput) visitDateInput.oninput = refreshCalLink;
+    if(visitTimeInput) visitTimeInput.oninput = refreshCalLink;
+
+    const revStart = root.querySelector('#rev-start');
+    const revEnd = root.querySelector('#rev-end');
+    if(revStart) revStart.onchange = () => setState({ revStart: revStart.value });
+    if(revEnd) revEnd.onchange = () => setState({ revEnd: revEnd.value });
+  }
+
+  loadOrders();
+})();
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(err => console.error('SW 등록 실패', err));
+  });
+}
+</script>
+</body>
+</html>
